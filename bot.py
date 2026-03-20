@@ -1,111 +1,107 @@
-# Don't Remove Credit @VJ_Bots
-# Subscribe YouTube Channel For Amazing Bot @Tech_VJ
-# Ask Doubt on telegram @KingVJ01
-
-import sys
-import glob
-import importlib
-from pathlib import Path
-from pyrogram import idle
-import logging
-import logging.config
-
-# Don't Remove Credit Tg - @VJ_Bots
-# Subscribe YouTube Channel For Amazing Bot https://youtube.com/@Tech_VJ
-# Ask Doubt on telegram @KingVJ01
-
-# Get logging configurations
-logging.config.fileConfig('logging.conf')
-logging.getLogger().setLevel(logging.INFO)
-logging.getLogger("pyrogram").setLevel(logging.ERROR)
-
-# Don't Remove Credit Tg - @VJ_Bots
-# Subscribe YouTube Channel For Amazing Bot https://youtube.com/@Tech_VJ
-# Ask Doubt on telegram @KingVJ01
-
-
-from pyrogram import Client, __version__
-from pyrogram.raw.all import layer
-from config import LOG_CHANNEL, ON_HEROKU, CLONE_MODE, PORT
-from typing import Union, Optional, AsyncGenerator
-from pyrogram import types
-from Script import script 
-from datetime import date, datetime 
-import pytz
-from aiohttp import web
-from TechVJ.server import web_server
-
-# Don't Remove Credit Tg - @VJ_Bots
-# Subscribe YouTube Channel For Amazing Bot https://youtube.com/@Tech_VJ
-# Ask Doubt on telegram @KingVJ01
-
+import os
 import asyncio
-from pyrogram import idle
-from plugins.clone import restart_bots
-from TechVJ.bot import StreamBot
-from TechVJ.utils.keepalive import ping_server
-from TechVJ.bot.clients import initialize_clients
+from pyrogram import Client, filters
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from pymongo import MongoClient
+from datetime import datetime
+from flask import Flask
+from threading import Thread
 
-# Don't Remove Credit Tg - @VJ_Bots
-# Subscribe YouTube Channel For Amazing Bot https://youtube.com/@Tech_VJ
-# Ask Doubt on telegram @KingVJ01
+# --- CONFIGURATION ---
+API_ID = int(os.environ.get("API_ID", "12345")) 
+API_HASH = os.environ.get("API_HASH", "your_hash")
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "your_token")
+MONGO_URI = os.environ.get("MONGO_URI", "your_mongodb_uri")
+ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))
+DB_CHANNEL_ID = int(os.environ.get("DB_CHANNEL_ID", "-100...")) # Jaha files store hongi
+FSUB_CHANNEL_ID = int(os.environ.get("FSUB_CHANNEL_ID", "-100...")) # Force Join Channel
+SUB_BOT_USER = "Aapka_Subscription_Bot_Username"
 
+# --- DB SETUP ---
+client = MongoClient(MONGO_URI)
+db = client['all_in_one_bot'] 
+users_col = db['users'] 
+settings_col = db['settings']
 
-ppath = "plugins/*.py"
-files = glob.glob(ppath)
-StreamBot.start()
-loop = asyncio.get_event_loop()
+app = Client("advanced_file_store", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# Don't Remove Credit Tg - @VJ_Bots
-# Subscribe YouTube Channel For Amazing Bot https://youtube.com/@Tech_VJ
-# Ask Doubt on telegram @KingVJ01
+# --- HELPERS ---
+def get_config():
+    conf = settings_col.find_one({"id": "bot_config"})
+    return conf if conf else {"delete_time": 60}
 
+def is_prime(user_id):
+    if user_id == ADMIN_ID: return True
+    user = users_col.find_one({"user_id": user_id})
+    return user and user.get('expiry', 0) > datetime.now().timestamp()
 
-async def start():
-    print('\n')
-    print('Initalizing Tech VJ Bot')
-    bot_info = await StreamBot.get_me()
-    StreamBot.username = bot_info.username
-    await initialize_clients()
-    for name in files:
-        with open(name) as a:
-            patt = Path(a.name)
-            plugin_name = patt.stem.replace(".py", "")
-            plugins_dir = Path(f"plugins/{plugin_name}.py")
-            import_path = "plugins.{}".format(plugin_name)
-            spec = importlib.util.spec_from_file_location(import_path, plugins_dir)
-            load = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(load)
-            sys.modules["plugins." + plugin_name] = load
-            print("Tech VJ Imported => " + plugin_name)
-    if ON_HEROKU:
-        asyncio.create_task(ping_server())
-    me = await StreamBot.get_me()
-    tz = pytz.timezone('Asia/Kolkata')
-    today = date.today()
-    now = datetime.now(tz)
-    time = now.strftime("%H:%M:%S %p")
-    app = web.AppRunner(await web_server())
-    await StreamBot.send_message(chat_id=LOG_CHANNEL, text=script.RESTART_TXT.format(today, time))
-    await app.setup()
-    bind_address = "0.0.0.0"
-    await web.TCPSite(app, bind_address, PORT).start()
-    if CLONE_MODE == True:
-        await restart_bots()
-    print("Bot Started Powered By @VJ_Bots")
-    await idle()
+async def auto_delete(message, t):
+    await asyncio.sleep(t)
+    try: await message.delete()
+    except: pass
 
-# Don't Remove Credit Tg - @VJ_Bots
-# Subscribe YouTube Channel For Amazing Bot https://youtube.com/@Tech_VJ
-# Ask Doubt on telegram @KingVJ01
-
-if __name__ == '__main__':
+# --- FORCE SUBSCRIBE CHECK ---
+async def check_fsub(client, message):
     try:
-        loop.run_until_complete(start())
-    except KeyboardInterrupt:
-        logging.info('Service Stopped Bye 👋')
+        await client.get_chat_member(FSUB_CHANNEL_ID, message.from_user.id)
+        return True
+    except:
+        btn = [[InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/your_channel_link")]]
+        await message.reply_text("❌ Pehle hamare channel ko join karein!", reply_markup=InlineKeyboardMarkup(btn))
+        return False
 
+# --- COMMANDS ---
 
-# Don't Remove Credit Tg - @VJ_Bots
-# Subscribe YouTube Channel For Amazing Bot https://youtube.com/@Tech_VJ
-# Ask Doubt on telegram @KingVJ01
+@app.on_message(filters.command("start") & filters.private)
+async def start(client, message):
+    if not await check_fsub(client, message): return
+    
+    text = message.text.split()
+    if len(text) > 1:
+        if not is_prime(message.from_user.id):
+            btn = [[InlineKeyboardButton("💳 Buy Prime Access", url=f"https://t.me/{SUB_BOT_USER}")]]
+            return await message.reply_text("❌ Ye file Prime members ke liye hai. Subscription lein.", reply_markup=InlineKeyboardMarkup(btn))
+        
+        try:
+            conf = get_config()
+            f_id = int(text[1])
+            sent = await client.copy_message(message.chat.id, DB_CHANNEL_ID, f_id)
+            warn = await message.reply_text(f"⚠️ Ye file {conf['delete_time']}s mein delete ho jayegi!")
+            asyncio.create_task(auto_delete(sent, conf['delete_time']))
+            asyncio.create_task(auto_delete(warn, conf['delete_time']))
+        except: await message.reply_text("File Not Found!")
+        return
+    await message.reply_text("👋 Bot is Online!\n\n/batch - Create Batch\n/broadcast - Send Message to All\n/setdelete - Change Timer")
+
+@app.on_message(filters.command("setdelete") & filters.user(ADMIN_ID))
+async def set_timer(client, message):
+    try:
+        t = int(message.text.split()[1])
+        settings_col.update_one({"id": "bot_config"}, {"$set": {"delete_time": t}}, upsert=True)
+        await message.reply_text(f"✅ Timer set to {t} seconds.")
+    except: await message.reply_text("Use: `/setdelete 60`")
+
+@app.on_message(filters.command("broadcast") & filters.user(ADMIN_ID) & filters.reply)
+async def broadcast(client, message):
+    users = users_col.find({})
+    for user in users:
+        try: await message.reply_to_message.copy(user['user_id'])
+        except: pass
+    await message.reply_text("✅ Broadcast Done!")
+
+@app.on_message(filters.user(ADMIN_ID) & (filters.video | filters.document))
+async def save_file(client, message):
+    db_msg = await message.copy(DB_CHANNEL_ID)
+    bot_un = (await client.get_me()).username
+    await message.reply_text(f"✅ **Link:** `https://t.me/{bot_un}?start={db_msg.id}`")
+
+# --- WEB SERVER ---
+web = Flask('')
+@web.route('/')
+def home(): return "Running"
+def run(): web.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
+
+if __name__ == "__main__":
+    Thread(target=run).start()
+    app.run()
+
