@@ -1,111 +1,55 @@
-# Don't Remove Credit @VJ_Bots
-# Subscribe YouTube Channel For Amazing Bot @Tech_VJ
-# Ask Doubt on telegram @KingVJ01
+import os
+from pyrogram import Client, filters
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-import sys
-import glob
-import importlib
-from pathlib import Path
-from pyrogram import idle
-import logging
-import logging.config
+# --- अपनी डिटेल्स यहाँ भरें ---
+API_ID = 1234567  # अपना API ID डालें
+API_HASH = "your_api_hash"  # अपना API HASH डालें
+BOT_TOKEN = "your_bot_token"  # अपना बॉट टोकन डालें
+DB_CHANNEL = -100123456789  # अपना चैनल ID (जहां फाइल सेव होगी)
+# MongoDB URL: mongodb+srv://user:pass@cluster.mongodb.net/test
+MONGODB_URI = "your_mongodb_url" 
 
-# Don't Remove Credit Tg - @VJ_Bots
-# Subscribe YouTube Channel For Amazing Bot https://youtube.com/@Tech_VJ
-# Ask Doubt on telegram @KingVJ01
+# --- बॉट सेटअप ---
+app = Client(
+    "FileStoreBot",
+    api_id=API_ID,
+    api_hash=API_HASH,
+    bot_token=BOT_TOKEN
+)
 
-# Get logging configurations
-logging.config.fileConfig('logging.conf')
-logging.getLogger().setLevel(logging.INFO)
-logging.getLogger("pyrogram").setLevel(logging.ERROR)
+@app.on_message(filters.command("start"))
+async def start(client, message):
+    if len(message.command) > 1:
+        # अगर यूजर लिंक पर क्लिक करके आया है
+        file_id = int(message.command[1])
+        try:
+            await client.copy_message(
+                chat_id=message.chat.id,
+                from_chat_id=DB_CHANNEL,
+                message_id=file_id
+            )
+        except Exception as e:
+            await message.reply(f"Error: फाइल नहीं मिली!\n{e}")
+    else:
+        await message.reply("नमस्ते! मुझे कोई भी फाइल भेजें, मैं उसका Permanent Link बना दूंगा।")
 
-# Don't Remove Credit Tg - @VJ_Bots
-# Subscribe YouTube Channel For Amazing Bot https://youtube.com/@Tech_VJ
-# Ask Doubt on telegram @KingVJ01
+@app.on_message(filters.document | filters.video | filters.audio | filters.photo)
+async def store_file(client, message):
+    # फाइल को आपके चैनल में भेजना
+    sent_msg = await message.forward(DB_CHANNEL)
+    
+    # शेयरिंग लिंक बनाना
+    bot_username = (await client.get_me()).username
+    share_link = f"https://t.me/{bot_username}?start={sent_msg.id}"
+    
+    # यूजर को रिप्लाई देना
+    await message.reply(
+        f"✅ **आपकी फाइल स्टोर हो गई है!**\n\n🔗 **लिंक:** `{share_link}`",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("Open File 📂", url=share_link)]
+        ])
+    )
 
-
-from pyrogram import Client, __version__
-from pyrogram.raw.all import layer
-from config import LOG_CHANNEL, ON_HEROKU, CLONE_MODE, PORT
-from typing import Union, Optional, AsyncGenerator
-from pyrogram import types
-from Script import script 
-from datetime import date, datetime 
-import pytz
-from aiohttp import web
-from TechVJ.server import web_server
-
-# Don't Remove Credit Tg - @VJ_Bots
-# Subscribe YouTube Channel For Amazing Bot https://youtube.com/@Tech_VJ
-# Ask Doubt on telegram @KingVJ01
-
-import asyncio
-from pyrogram import idle
-from plugins.clone import restart_bots
-from TechVJ.bot import StreamBot
-from TechVJ.utils.keepalive import ping_server
-from TechVJ.bot.clients import initialize_clients
-
-# Don't Remove Credit Tg - @VJ_Bots
-# Subscribe YouTube Channel For Amazing Bot https://youtube.com/@Tech_VJ
-# Ask Doubt on telegram @KingVJ01
-
-
-ppath = "plugins/*.py"
-files = glob.glob(ppath)
-StreamBot.start()
-loop = asyncio.get_event_loop()
-
-# Don't Remove Credit Tg - @VJ_Bots
-# Subscribe YouTube Channel For Amazing Bot https://youtube.com/@Tech_VJ
-# Ask Doubt on telegram @KingVJ01
-
-
-async def start():
-    print('\n')
-    print('Initalizing Tech VJ Bot')
-    bot_info = await StreamBot.get_me()
-    StreamBot.username = bot_info.username
-    await initialize_clients()
-    for name in files:
-        with open(name) as a:
-            patt = Path(a.name)
-            plugin_name = patt.stem.replace(".py", "")
-            plugins_dir = Path(f"plugins/{plugin_name}.py")
-            import_path = "plugins.{}".format(plugin_name)
-            spec = importlib.util.spec_from_file_location(import_path, plugins_dir)
-            load = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(load)
-            sys.modules["plugins." + plugin_name] = load
-            print("Tech VJ Imported => " + plugin_name)
-    if ON_HEROKU:
-        asyncio.create_task(ping_server())
-    me = await StreamBot.get_me()
-    tz = pytz.timezone('Asia/Kolkata')
-    today = date.today()
-    now = datetime.now(tz)
-    time = now.strftime("%H:%M:%S %p")
-    app = web.AppRunner(await web_server())
-    await StreamBot.send_message(chat_id=LOG_CHANNEL, text=script.RESTART_TXT.format(today, time))
-    await app.setup()
-    bind_address = "0.0.0.0"
-    await web.TCPSite(app, bind_address, PORT).start()
-    if CLONE_MODE == True:
-        await restart_bots()
-    print("Bot Started Powered By @VJ_Bots")
-    await idle()
-
-# Don't Remove Credit Tg - @VJ_Bots
-# Subscribe YouTube Channel For Amazing Bot https://youtube.com/@Tech_VJ
-# Ask Doubt on telegram @KingVJ01
-
-if __name__ == '__main__':
-    try:
-        loop.run_until_complete(start())
-    except KeyboardInterrupt:
-        logging.info('Service Stopped Bye 👋')
-
-
-# Don't Remove Credit Tg - @VJ_Bots
-# Subscribe YouTube Channel For Amazing Bot https://youtube.com/@Tech_VJ
-# Ask Doubt on telegram @KingVJ01
+print("बॉट चालू हो गया है... अपना टेलीग्राम चेक करें!")
+app.run()
